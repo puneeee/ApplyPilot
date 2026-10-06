@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "ApplyPilot",
+  "version": "0.1.0",
+  "description": "Local-first, context-aware job application autofill.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "action": {
+    "default_title": "ApplyPilot",
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "content_scripts": [{
+    "matches": ["http://*/*", "https://*/*"],
+    "js": ["content.js"],
+    "css": ["content.css"],
+    "run_at": "document_idle"
+  }]
+}

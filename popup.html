@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="ui.css"><title>ApplyPilot</title></head>
+  <body>
+    <main>
+      <header><div class="mark">✦</div><div><h1>ApplyPilot</h1><p>Local-first application help</p></div></header>
+      <section id="setup-card" class="card hidden"><h2>Complete your profile first</h2><p>ApplyPilot only fills details you have saved on this device.</p><button id="open-setup" class="primary">Set up profile</button></section>
+      <section id="app-card" class="hidden">
+        <div class="card"><h2>Ready on this page</h2><p id="profile-summary">Your profile stays in Chrome on this device.</p><button id="fill" class="primary">Scan & fill this step</button><button id="next" class="secondary">Continue to next step</button><p class="hint">ApplyPilot never clicks a final Submit button.</p></div>
+        <div id="result" class="result" aria-live="polite"></div>
+        <button id="open-settings" class="link">Edit profile & privacy settings</button>
+      </section>
+      <footer>Nothing is sent to ApplyPilot. Cloud AI is not enabled.</footer>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
