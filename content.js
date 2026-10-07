@@ -11,9 +11,11 @@
   const labelFor = (el) => {
     const byFor = el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
     const closest = el.closest('label');
+    const parentLabel = el.parentElement?.querySelector(':scope > label') || el.previousElementSibling?.matches?.('label') && el.previousElementSibling;
+    const labelledBy = el.getAttribute('aria-labelledby')?.split(/\s+/).map((id) => document.getElementById(id)?.innerText).join(' ') || '';
     const aria = el.getAttribute('aria-label') || el.getAttribute('placeholder') || '';
-    const group = el.closest('fieldset, [role="group"], .field, .form-group, li, div')?.innerText || '';
-    return text([byFor?.innerText, closest?.innerText, el.name, el.id, aria, group].filter(Boolean).join(' '));
+    const legend = el.closest('fieldset')?.querySelector('legend')?.innerText || '';
+    return text([byFor?.innerText, closest?.innerText, parentLabel?.innerText, labelledBy, legend, el.name, el.id, aria].filter(Boolean).join(' '));
   };
   const intentFor = (question, el) => {
     const q = norm(question);
@@ -22,11 +24,14 @@
     if (type === 'tel' || /phone|mobile|telephone/.test(q)) return 'phone';
     if (/first.?name|given.?name/.test(q)) return 'firstName';
     if (/last.?name|family.?name|surname/.test(q)) return 'lastName';
-    if (/full.?name|legal.?name|name of applicant/.test(q)) return 'fullName';
+    if (/full.?name|legal.?name|name of applicant|^name\b|\bname\b/.test(q)) return 'fullName';
     if (/linkedin/.test(q)) return 'linkedin'; if (/github/.test(q)) return 'github'; if (/portfolio|personal website|website url/.test(q)) return 'portfolio';
     if (/current (job )?title|current position/.test(q)) return 'currentTitle';
     if (/current (employer|company|organization)/.test(q)) return 'currentCompany';
     if (/years? (of )?(work |professional )?experience/.test(q)) return 'yearsExperience';
+    if (/salary currency|currency/.test(q)) return 'salaryCurrency';
+    if (/current salary|present salary|existing salary/.test(q)) return 'currentSalary';
+    if (/expected salary|desired salary|salary expectation/.test(q)) return 'expectedSalary';
     if (/university|college|school( name)?/.test(q)) return 'school';
     if (/degree/.test(q)) return 'degree'; if (/major|field of study|discipline/.test(q)) return 'major';
     if (/graduat/.test(q)) return 'graduationYear';
@@ -54,8 +59,31 @@
     const match = inputs.find((input) => norm(labelFor(input)).includes(desired) || norm(input.value) === desired);
     if (!match) return false; match.click(); match.classList.add('applypilot-filled'); return true;
   };
-  function fill(profile) {
-    const controls = [...document.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="file"]), textarea, select')].filter(visible);
+  function selectCustom(el, value) {
+    el.click();
+    const candidates = [...document.querySelectorAll('[role="option"], [role="listbox"] li, [role="listbox"] button, [role="menuitem"], [data-value]')].filter(visible);
+    const option = candidates.find((candidate) => norm(candidate.innerText || candidate.getAttribute('aria-label') || candidate.getAttribute('data-value')).includes(norm(value)));
+    if (!option) return false;
+    option.click(); el.classList.add('applypilot-filled'); return true;
+  }
+  async function attachResume() {
+    const inputs = [...document.querySelectorAll('input[type="file"]')];
+    if (!inputs.length) return { attached: false };
+    const response = await chrome.runtime.sendMessage({ action: 'getResume' });
+    const resume = response?.resume;
+    if (!resume?.base64) return { attached: false, message: 'A resume field was found, but no resume is saved in ApplyPilot.' };
+    const binary = atob(resume.base64); const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const file = new File([bytes], resume.name, { type: resume.type || 'application/octet-stream' });
+    const transfer = new DataTransfer(); transfer.items.add(file);
+    let count = 0;
+    for (const input of inputs) {
+      try { input.files = transfer.files; fire(input); input.classList.add('applypilot-filled'); count++; } catch (_) { /* Site-specific uploader may reject a synthetic file list. */ }
+    }
+    return count ? { attached: true, message: `Attached saved resume: ${resume.name}.` } : { attached: false, message: 'This site prevented automatic resume attachment. Choose the saved resume manually.' };
+  }
+  async function fill(profile) {
+    const controls = [...document.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="file"]), textarea, select, [role="combobox"], [aria-haspopup="listbox"], button:not([type="submit"])')].filter(visible);
     let filled = 0; const unknown = []; const visitedGroups = new Set();
     for (const el of controls) {
       if (el.disabled || el.readOnly || (el.value && el.type !== 'radio' && el.type !== 'checkbox')) continue;
@@ -69,11 +97,12 @@
       if (el.tagName === 'SELECT') {
         const option = [...el.options].find((o) => norm(o.text).includes(norm(value)) || norm(o.value) === norm(value));
         if (option) { el.value = option.value; fire(el); el.classList.add('applypilot-filled'); filled++; } else if (el.required) unknown.push(question);
+      } else if (el.matches('[role="combobox"], [aria-haspopup="listbox"], button')) {
+        if (selectCustom(el, value)) filled++; else if (el.required) unknown.push(question);
       } else { setValue(el, value); filled++; }
     }
-    const resumeInputs = [...document.querySelectorAll('input[type="file"]')].filter(visible);
-    if (resumeInputs.length && profile.resumeName) toast(`Resume upload detected: choose “${profile.resumeName}” yourself. Browsers prevent extensions from attaching files silently.`, true);
-    const message = `Filled ${filled} field${filled === 1 ? '' : 's'} locally.${unknown.length ? ` ${unknown.length} required field${unknown.length === 1 ? '' : 's'} still need your input.` : ''}`;
+    const resume = await attachResume();
+    const message = `Filled ${filled} field${filled === 1 ? '' : 's'} locally.${resume.message ? ` ${resume.message}` : ''}${unknown.length ? ` ${unknown.length} required field${unknown.length === 1 ? '' : 's'} still need your input.` : ''}`;
     toast(message, Boolean(unknown.length)); return { message, unresolved: unknown.length };
   }
   function next() {
@@ -85,7 +114,7 @@
     nextButton.click(); const message = 'Moving to the next application step. ApplyPilot will not submit the application.'; toast(message); return { message, isFinal: false };
   }
   chrome.runtime.onMessage.addListener((request, _sender, respond) => {
-    if (request.action === 'fill') respond(fill(request.profile || {}));
+    if (request.action === 'fill') { fill(request.profile || {}).then(respond).catch((error) => respond({ message: error.message, unresolved: true })); return true; }
     if (request.action === 'next') respond(next());
   });
 })();

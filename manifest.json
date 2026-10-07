@@ -3,7 +3,10 @@
   "name": "ApplyPilot",
   "version": "0.1.0",
   "description": "Local-first, context-aware job application autofill.",
-  "permissions": ["storage", "activeTab", "scripting"],
+  "permissions": ["storage", "unlimitedStorage", "activeTab", "scripting"],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_title": "ApplyPilot",
     "default_popup": "popup.html"
